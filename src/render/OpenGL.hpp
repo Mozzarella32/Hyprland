@@ -253,6 +253,8 @@ class CHyprOpenGLImpl {
 
     void                                        ensureLockTexturesRendered(bool load);
 
+    bool                                        explicitSyncSupported();
+
     bool                                        m_shadersInitialized = false;
     SP<SPreparedShaders>                        m_shaders;
 
@@ -297,17 +299,20 @@ class CHyprOpenGLImpl {
         bool KHR_display_reference              = false;
         bool IMG_context_priority               = false;
         bool EXT_create_context_robustness      = false;
+        bool EGL_ANDROID_native_fence_sync_ext  = false;
     } m_exts;
 
     SP<CTexture> m_screencopyDeniedTexture;
 
-  private:
     enum eEGLContextVersion : uint8_t {
         EGL_CONTEXT_GLES_2_0 = 0,
         EGL_CONTEXT_GLES_3_0,
         EGL_CONTEXT_GLES_3_2,
     };
 
+    eEGLContextVersion m_eglContextVersion = EGL_CONTEXT_GLES_3_2;
+
+  private:
     struct {
         GLint   x      = 0;
         GLint   y      = 0;
@@ -316,8 +321,6 @@ class CHyprOpenGLImpl {
     } m_lastViewport;
 
     std::unordered_map<int, bool> m_capStatus;
-
-    eEGLContextVersion            m_eglContextVersion = EGL_CONTEXT_GLES_3_2;
 
     std::vector<SDRMFormat>       m_drmFormats;
     bool                          m_hasModifiers = false;

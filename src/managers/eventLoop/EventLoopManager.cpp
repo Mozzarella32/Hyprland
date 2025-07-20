@@ -100,22 +100,27 @@ void CEventLoopManager::enterLoop() {
 }
 
 void CEventLoopManager::onTimerFire() {
-    for (auto const& t : m_timers.timers) {
-        if (t.strongRef() > 1 /* if it's 1, it was lost. Don't call it. */ && t->passed() && !t->cancelled())
+    const auto CPY = m_timers.timers;
+    for (auto const& t : CPY) {
+        if (t.strongRef() > 2 /* if it's 2, it was lost. Don't call it. */ && t->passed() && !t->cancelled())
             t->call(t);
     }
 
-    nudgeTimers();
+    scheduleRecalc();
 }
 
 void CEventLoopManager::addTimer(SP<CEventLoopTimer> timer) {
-    m_timers.timers.push_back(timer);
-    nudgeTimers();
+    if (std::ranges::contains(m_timers.timers, timer))
+        return;
+    m_timers.timers.emplace_back(timer);
+    scheduleRecalc();
 }
 
 void CEventLoopManager::removeTimer(SP<CEventLoopTimer> timer) {
+    if (!std::ranges::contains(m_timers.timers, timer))
+        return;
     std::erase_if(m_timers.timers, [timer](const auto& t) { return timer == t; });
-    nudgeTimers();
+    scheduleRecalc();
 }
 
 static void timespecAddNs(timespec* pTimespec, int64_t delta) {
@@ -131,7 +136,21 @@ static void timespecAddNs(timespec* pTimespec, int64_t delta) {
     }
 }
 
+void CEventLoopManager::scheduleRecalc() {
+    // do not do it instantly, do it later. Avoid recursive access to the timer
+    // vector, it could be catastrophic if we modify it while iterating
+
+    if (m_timers.recalcScheduled)
+        return;
+
+    m_timers.recalcScheduled = true;
+
+    doLater([this] { nudgeTimers(); });
+}
+
 void CEventLoopManager::nudgeTimers() {
+    m_timers.recalcScheduled = false;
+
     // remove timers that have gone missing
     std::erase_if(m_timers.timers, [](const auto& t) { return t.strongRef() <= 1; });
 

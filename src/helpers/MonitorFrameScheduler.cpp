@@ -8,10 +8,15 @@ CMonitorFrameScheduler::CMonitorFrameScheduler(PHLMONITOR m) : m_monitor(m) {
     ;
 }
 
-void CMonitorFrameScheduler::onSyncFired() {
+bool CMonitorFrameScheduler::newSchedulingEnabled() {
     static auto PENABLENEW = CConfigValue<Hyprlang::INT>("render:new_render_scheduling");
 
-    if (!*PENABLENEW)
+    return *PENABLENEW && g_pHyprOpenGL->explicitSyncSupported();
+}
+
+void CMonitorFrameScheduler::onSyncFired() {
+
+    if (!newSchedulingEnabled())
         return;
 
     // Sync fired: reset submitted state, set as rendered. Check the last render time. If we are running
@@ -36,9 +41,7 @@ void CMonitorFrameScheduler::onSyncFired() {
 }
 
 void CMonitorFrameScheduler::onPresented() {
-    static auto PENABLENEW = CConfigValue<Hyprlang::INT>("render:new_render_scheduling");
-
-    if (!*PENABLENEW)
+    if (!newSchedulingEnabled())
         return;
 
     if (!m_pendingThird)
@@ -53,6 +56,8 @@ void CMonitorFrameScheduler::onPresented() {
     m_pendingThird = false;
 
     g_pEventLoopManager->doLater([m = m_monitor.lock()] {
+        if (!m)
+            return;
         g_pHyprRenderer->commitPendingAndDoExplicitSync(m); // commit the pending frame. If it didn't fire yet (is not rendered) it doesn't matter. Syncs will wait.
 
         // schedule a frame: we might have some missed damage, which got cleared due to the above commit.
@@ -63,8 +68,6 @@ void CMonitorFrameScheduler::onPresented() {
 }
 
 void CMonitorFrameScheduler::onFrame() {
-    static auto PENABLENEW = CConfigValue<Hyprlang::INT>("render:new_render_scheduling");
-
     if (!canRender())
         return;
 
@@ -81,7 +84,7 @@ void CMonitorFrameScheduler::onFrame() {
         m_monitor->m_tearingState.frameScheduledWhileBusy = false;
     }
 
-    if (!*PENABLENEW) {
+    if (!newSchedulingEnabled()) {
         m_monitor->m_lastPresentationTimer.reset();
 
         g_pHyprRenderer->renderMonitor(m_monitor.lock());
@@ -103,7 +106,7 @@ void CMonitorFrameScheduler::onFrame() {
 void CMonitorFrameScheduler::onFinishRender() {
     m_sync = CEGLSync::create(); // this destroys the old sync
     g_pEventLoopManager->doOnReadable(m_sync->fd().duplicate(), [this, mon = m_monitor] {
-        if (!m_monitor) // might've gotten destroyed
+        if (!mon) // might've gotten destroyed
             return;
         onSyncFired();
     });
