@@ -95,6 +95,8 @@ void CInputManager::onTouchDown(ITouch::SDownEvent e) {
     } else
         return; // oops, nothing found.
 
+    addLastPressed(g_pInputManager->getMouseCoordsInternal(), true);
+
     g_pSeatManager->sendTouchDown(m_touchData.touchFocusSurface.lock(), e.timeMs, e.touchID, local);
 }
 
@@ -115,6 +117,8 @@ void CInputManager::onTouchUp(ITouch::SUpEvent e) {
 
 void CInputManager::onTouchMove(ITouch::SMotionEvent e) {
     m_lastInputTouch = true;
+
+    m_lastCursorMovement.reset();
 
     EMIT_HOOK_EVENT_CANCELLABLE("touchMove", e);
     if (m_activeSwipe.pWorkspaceBegin) {
